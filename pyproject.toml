@@ -1,0 +1,10 @@
+[project]
+name = "skill-agent"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "openai>=2.49.0",
+    "smolagents[toolkit]>=1.26.0",
+]
