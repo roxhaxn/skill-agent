@@ -2,6 +2,23 @@ from smolagents import CodeAgent, OpenAIServerModel
 from retriever import retrieve
 from tools import TOOL_REGISTRY
 from tasks import TASKS
+def steer(task: str, tool_names: list[str]) -> str:
+    """Wrap the task with an explicit instruction to use only the real tools."""
+    if tool_names:
+        tools_str = ", ".join(tool_names)
+        instruction = (
+            f"IMPORTANT: You have ONLY these tools available: {tools_str}. "
+            f"Do NOT call any other function such as web_search, wikipedia_search, "
+            f"or requests — they do not exist and will fail. "
+            f"If a tool is needed, use only the ones listed. "
+        )
+    else:
+        instruction = (
+            "IMPORTANT: You have NO special tools. Solve this using plain Python "
+            "computation only. Do NOT call web_search, wikipedia_search, or import "
+            "external libraries — they will fail. "
+        )
+    return instruction + "\n\nTask: " + task
 
 model = OpenAIServerModel(
     model_id="qwen2.5:3b",
@@ -24,33 +41,33 @@ def is_correct(agent_answer, expected) -> bool:
     return normalize(agent_answer) == normalize(expected)
 
 
-def build_baseline_agent(task: str) -> CodeAgent:
-    """Baseline: hand the agent ALL tools, no retrieval."""
-    return CodeAgent(tools=ALL_TOOLS, model=model, add_base_tools=False, max_steps=4)
+def build_baseline_agent(task: str):
+    agent = CodeAgent(tools=ALL_TOOLS, model=model, add_base_tools=False, max_steps=4)
+    tool_names = list(TOOL_REGISTRY.keys())          # baseline sees all tools
+    return agent, steer(task, tool_names)
 
 
-def build_retrieval_agent(task: str, threshold: float = 0.3) -> CodeAgent:
-    """Retrieval: hand the agent only the skills relevant to THIS task."""
-    chosen = []
+def build_retrieval_agent(task: str, threshold: float = 0.3):
+    chosen, names = [], []
     for skill, score in retrieve(task, k=3):
         if score >= threshold and skill["name"] in TOOL_REGISTRY:
             chosen.append(TOOL_REGISTRY[skill["name"]])
-    return CodeAgent(tools=chosen, model=model, add_base_tools=False, max_steps=4)
+            names.append(skill["name"])
+    agent = CodeAgent(tools=chosen, model=model, add_base_tools=False, max_steps=4)
+    return agent, steer(task, names)                 # retrieval sees only chosen
 
 
 def run_condition(build_fn, n_runs: int = 5) -> dict:
-    """Run every task n_runs times with the given agent-builder; return per-task success rates."""
     results = {}
     for t in TASKS:
         successes = 0
         for _ in range(n_runs):
-            agent = build_fn(t["task"])
-            answer = agent.run(t["task"])
+            agent, steered_task = build_fn(t["task"])
+            answer = agent.run(steered_task)          # run the STEERED task
             if is_correct(answer, t["expected"]):
                 successes += 1
         results[t["id"]] = successes / n_runs
     return results
-
 
 if __name__ == "__main__":
     N = 5
