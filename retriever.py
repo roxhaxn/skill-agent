@@ -7,11 +7,9 @@ embedder = SentenceTransformer("all-MiniLM-L6-v2")
 # 2. Our skill library. For now, each skill is just a name + a description.
 #    (Later, each will also carry its actual tool function.)
 SKILLS = [
-    {"name": "get_employee_count", "description": "Look up the number of employees (headcount, workforce size) at a company."},
-    {"name": "convert_currency",   "description": "Convert an amount of money from one currency to another using exchange rates."},
-    {"name": "get_weather",        "description": "Get the current weather or temperature for a city or location."},
-    {"name": "bake_bread",         "description": "Step-by-step recipe and instructions for baking bread at home."},
-    {"name": "calculate_distance", "description": "Compute the distance between two cities or geographic points."},
+    {"name": "get_employee_count",  "description": "Look up the number of employees (headcount, workforce size) at a company."},
+    {"name": "convert_currency",    "description": "Convert an amount of money from one currency to another using exchange rates."},
+    {"name": "get_city_population", "description": "Look up the population (number of residents) of a city."},
 ]
 
 # 3. BUILD TIME: embed every skill description once, up front.
