@@ -2,6 +2,7 @@ from smolagents import CodeAgent, OpenAIServerModel
 from retriever import retrieve
 from tools import TOOL_REGISTRY
 from tasks import TASKS
+from steering import steer          # now imported from the shared module
 
 model = OpenAIServerModel(
     model_id="qwen2.5:3b",
@@ -10,26 +11,6 @@ model = OpenAIServerModel(
 )
 
 ALL_TOOLS = list(TOOL_REGISTRY.values())   # every tool, for the baseline
-
-
-# --- Prompt steering: counteract the system-prompt tool leak ---
-def steer(task: str, tool_names: list[str]) -> str:
-    """Wrap the task with an explicit instruction to use only the real tools."""
-    if tool_names:
-        tools_str = ", ".join(tool_names)
-        instruction = (
-            f"IMPORTANT: You have ONLY these tools available: {tools_str}. "
-            f"Do NOT call any other function such as web_search, wikipedia_search, "
-            f"or requests — they do not exist and will fail. "
-            f"If a tool is needed, use only the ones listed. "
-        )
-    else:
-        instruction = (
-            "IMPORTANT: You have NO special tools. Solve this using plain Python "
-            "computation only. Do NOT call web_search, wikipedia_search, or import "
-            "external libraries — they will fail. "
-        )
-    return instruction + "\n\nTask: " + task
 
 
 # --- Scoring ---
@@ -79,7 +60,7 @@ def run_condition(build_fn, n_runs: int) -> dict:
 
 
 if __name__ == "__main__":
-    N = 20   # scaled up from 5 for statistical confidence
+    N = 20   # runs per task per condition
     print(f"Running benchmark ({N} runs per task per condition)... this will take a while.\n")
 
     baseline = run_condition(build_baseline_agent, n_runs=N)
