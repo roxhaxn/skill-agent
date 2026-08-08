@@ -1,0 +1,7 @@
+{
+  "sum_employee_counts": {
+    "description": "Sum the employee counts across a list of companies.",
+    "code": "def learned_skill(input_list):\n    return sum(get_employee_count(x) for x in input_list)\n",
+    "tool": "get_employee_count"
+  }
+}
