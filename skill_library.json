@@ -8,5 +8,10 @@
     "description": "Reusable skill built from a verified run using convert_currency.",
     "code": "def learned_skill(kwargs):\n    result = convert_currency(**kwargs)\n    return result",
     "tool": "convert_currency"
+  },
+  "learned_get_city_population": {
+    "description": "Reusable skill built from a verified run using get_city_population.",
+    "code": "def learned_skill(items):\n    total_population = sum(get_city_population(item) for item in items)\n    return total_population",
+    "tool": "get_city_population"
   }
 }

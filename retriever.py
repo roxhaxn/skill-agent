@@ -10,6 +10,9 @@ SKILLS = [
     {"name": "get_employee_count",  "description": "Look up the number of employees (headcount, workforce size) at a company."},
     {"name": "convert_currency",    "description": "Convert an amount of money from one currency to another using exchange rates."},
     {"name": "get_city_population", "description": "Look up the population (number of residents) of a city."},
+    {"name": "get_stock_price",     "description": "Look up the current share price of a stock ticker."},
+    {"name": "get_distance_km",     "description": "Look up the distance in kilometers to a city."},
+    {"name": "get_temperature_c",   "description": "Look up the current temperature in Celsius for a city."},
 ]
 
 # 3. BUILD TIME: embed every skill description once, up front.
