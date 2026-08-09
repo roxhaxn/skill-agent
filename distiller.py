@@ -1,101 +1,93 @@
-import re
-from benchmark import model          # reuse the same Ollama model
+﻿import re
+from benchmark import model
 from tools import TOOL_REGISTRY
 
 
-# --- Helper: get a plain-callable version of a @tool ---
 def _plain(tool_obj):
-    """Return a plain callable for a smolagents @tool (or the object if already callable)."""
-    # smolagents Tool objects store the original function; fall back to calling directly.
-    fn = getattr(tool_obj, "forward", None) or getattr(tool_obj, "func", None) or tool_obj
-    return fn
+    return getattr(tool_obj, "forward", None) or getattr(tool_obj, "func", None) or tool_obj
 
 
-# --- Piece 1: ask the LLM to generalize the verified code ---
-def llm_distill(verified_code: str, tool_name: str) -> str | None:
-    """Ask the model to rewrite specific verified code as a general, parameterized function."""
+# --- Pattern templates: two general shapes a learned skill can take ---
+def template_map_reduce(tool_name: str) -> str:
+    """Call one tool over a list of items and sum the results."""
+    return (
+        "def learned_skill(items):\n"
+        "    total = 0\n"
+        "    for item in items:\n"
+        f"        total += {tool_name}(item)\n"
+        "    return total\n"
+    )
+
+
+def template_single_call(tool_name: str) -> str:
+    """Make one parameterized tool call and return its result."""
+    return (
+        "def learned_skill(kwargs):\n"
+        f"    return {tool_name}(**kwargs)\n"
+    )
+
+
+TEMPLATES = {
+    "map_reduce": template_map_reduce,
+    "single_call": template_single_call,
+}
+
+
+# --- Verify a candidate skill by EXECUTING it on the task's known test case ---
+def verify_skill(skill_code: str, tool_name: str, test_input, expected) -> bool:
+    tool_fn = _plain(TOOL_REGISTRY[tool_name])
+    namespace = {tool_name: tool_fn}
+    try:
+        exec(skill_code, namespace)
+        skill = namespace.get("learned_skill")
+        if skill is None:
+            return False
+        result = skill(test_input)
+        return str(result).strip() == str(expected).strip()
+    except Exception as e:
+        print(f"   [verify] failed: {e}")
+        return False
+
+
+# --- LLM distillation (tries to generalize the verified code) ---
+def llm_distill(verified_code: str, tool_name: str, pattern: str) -> str | None:
+    shape = ("a function learned_skill(items) that calls the tool on each item in a list and sums results"
+             if pattern == "map_reduce"
+             else "a function learned_skill(kwargs) that calls the tool once with **kwargs and returns the result")
     prompt = (
-        "You are refactoring working Python into a reusable function.\n"
-        f"The code below solves a task using the tool `{tool_name}`:\n\n"
+        f"Refactor this working code into {shape}, using the tool `{tool_name}`:\n\n"
         f"{verified_code}\n\n"
-        "Rewrite it as ONE general function named `learned_skill` that takes a list "
-        f"of inputs, calls `{tool_name}` on each, and returns the SUM as an int. "
-        "Do NOT call final_answer. Do NOT include print statements. "
-        "Return ONLY the function definition in a Python code block, nothing else."
+        "Return ONLY the function definition in a Python code block. No prints, no final_answer."
     )
     resp = model([{"role": "user", "content": prompt}])
     text = resp.content if hasattr(resp, "content") else str(resp)
-
-    # Pull the code out of a ```python ... ``` block if present.
     match = re.search(r"```(?:python)?\s*(.*?)```", text, re.DOTALL)
     return match.group(1).strip() if match else text.strip()
 
 
-# --- Piece 2: verify a candidate skill by EXECUTING it on a known input ---
-def verify_skill(skill_code: str, tool_name: str, test_input, expected) -> bool:
-    """Run the candidate skill in a controlled namespace; return True if it gives the right answer."""
-    tool_fn = _plain(TOOL_REGISTRY[tool_name])
-    namespace = {tool_name: tool_fn}      # make the real tool available to the skill
+# --- Orchestrator: try LLM then template, for the task's pattern; keep what verifies ---
+def distill_skill(verified_code: str, tool_name: str, test_case: dict):
+    if not test_case:
+        print("   [distill] no test_case (no tool) - nothing to distill")
+        return None
 
-    try:
-        exec(skill_code, namespace)        # define the function
-        skill = namespace.get("learned_skill")
-        if skill is None:
-            return False
-        result = skill(test_input)         # actually run it
-        return str(result).strip() == str(expected).strip()
-    except Exception as e:
-        print(f"   [verify] skill failed to execute: {e}")
-        return False
+    pattern = test_case["pattern"]
+    test_input = test_case["input"]
+    expected = test_case["expected"]
 
-
-# --- Piece 3: deterministic template fallback ---
-def template_distill(tool_name: str) -> str:
-    """A guaranteed-correct generalization for the 'call tool over a list, sum results' pattern."""
-    return (
-        f"def learned_skill(items):\n"
-        f"    total = 0\n"
-        f"    for item in items:\n"
-        f"        total += {tool_name}(item)\n"
-        f"    return total\n"
-    )
-
-
-# --- Orchestrator: LLM first, template fallback, never store unverified ---
-def distill_skill(verified_code: str, tool_name: str, test_input, expected):
-    """Return a verified reusable skill (code string), or None if nothing verifies."""
-    # Try the LLM.
-    candidate = llm_distill(verified_code, tool_name)
-    print("\n--- LLM CANDIDATE ---\n" + (candidate or "(none)"))
+    # 1. Try the LLM for this pattern.
+    candidate = llm_distill(verified_code, tool_name, pattern)
+    print(f"\n--- LLM CANDIDATE ({pattern}) ---\n{candidate}")
     if candidate and verify_skill(candidate, tool_name, test_input, expected):
         print("   [distill] LLM skill VERIFIED")
         return candidate
 
-    # Fall back to the template.
-    print("   [distill] LLM skill failed; trying template fallback")
-    fallback = template_distill(tool_name)
+    # 2. Fall back to the template for this pattern.
+    print("   [distill] LLM failed; trying template")
+    fallback = TEMPLATES[pattern](tool_name)
     if verify_skill(fallback, tool_name, test_input, expected):
         print("   [distill] template skill VERIFIED")
         return fallback
 
     print("   [distill] nothing verified; storing nothing")
     return None
-
-
-if __name__ == "__main__":
-    # The verified code your extractor produced:
-    verified_code = (
-        "acme_employees = get_employee_count('Acme')\n"
-        "initech_employees = get_employee_count('Initech')\n"
-        "total_employees = acme_employees + initech_employees\n"
-    )
-
-    skill = distill_skill(
-        verified_code,
-        tool_name="get_employee_count",
-        test_input=["Acme", "Initech"],   # known input
-        expected=1287,                     # known correct answer
-    )
-
-    print("\n=== FINAL DISTILLED SKILL ===")
-    print(skill if skill else "(distillation failed)")

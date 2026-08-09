@@ -3,5 +3,10 @@
     "description": "Sum the employee counts across a list of companies.",
     "code": "def learned_skill(input_list):\n    return sum(get_employee_count(x) for x in input_list)\n",
     "tool": "get_employee_count"
+  },
+  "learned_convert_currency": {
+    "description": "Reusable skill built from a verified run using convert_currency.",
+    "code": "def learned_skill(kwargs):\n    result = convert_currency(**kwargs)\n    return result",
+    "tool": "convert_currency"
   }
 }
