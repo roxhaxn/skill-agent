@@ -20,6 +20,10 @@ The library only ever grows with **execution-verified** skills — the agent can
 
 ## Key results
 
+## Key results
+
+![Before and after prompt steering: retrieval goes from 40% to 88%, overtaking the baseline](results.png)
+
 Retrieval + prompt-steering benchmark, **20 runs per task** (`qwen2.5:3b` via Ollama):
 
 | Condition | Avg success |
